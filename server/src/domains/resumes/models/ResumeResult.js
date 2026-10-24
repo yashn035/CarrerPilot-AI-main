@@ -2,14 +2,12 @@ import mongoose from 'mongoose';
 
 const ResumeResultSchema = new mongoose.Schema({
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: mongoose.Schema.Types.Mixed,
     required: true,
     index: true
   },
   resumeId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Resume',
+    type: mongoose.Schema.Types.Mixed,
     default: null
   },
   jobTitle: {
@@ -25,6 +23,29 @@ const ResumeResultSchema = new mongoose.Schema({
     required: true,
     min: 0,
     max: 100
+  },
+  raw_ai_score: {
+    type: Number,
+    default: 0
+  },
+  score_adjustment_reason: {
+    type: String,
+    default: ''
+  },
+  core_languages_missing: [{
+    type: String
+  }],
+  role_level_detected: {
+    type: String,
+    default: 'Mid'
+  },
+  candidate_level_estimate: {
+    type: String,
+    default: 'Mid'
+  },
+  level_match: {
+    type: String,
+    default: 'Strong'
   },
   breakdown: {
     formattingScore: { type: Number, default: 0 },

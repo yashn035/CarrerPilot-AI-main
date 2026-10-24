@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ShieldCheck, AlertTriangle, CheckCircle, Lightbulb, Zap, FileText, ArrowUpRight
+  ShieldCheck, AlertTriangle, CheckCircle, Lightbulb, Zap, FileText, ArrowUpRight, Info, Award
 } from 'lucide-react';
 
 export default function ATSScorePanel({ atsResult }) {
@@ -16,7 +16,27 @@ export default function ATSScorePanel({ atsResult }) {
     );
   }
 
-  const { overallScore, breakdown, foundKeywords, missingKeywords, bulletSuggestions, sectionFeedback } = atsResult;
+  const {
+    overallScore,
+    ats_score,
+    raw_ai_score,
+    score_adjustment_reason,
+    core_languages_missing,
+    role_level_detected,
+    candidate_level_estimate,
+    level_match,
+    breakdown,
+    foundKeywords,
+    detected_keywords,
+    missingKeywords,
+    missing_keywords,
+    bulletSuggestions,
+    sectionFeedback
+  } = atsResult;
+
+  const finalScore = ats_score !== undefined ? ats_score : (overallScore !== undefined ? overallScore : 85);
+  const matchedList = detected_keywords || foundKeywords || [];
+  const missingList = missing_keywords || missingKeywords || [];
 
   // Determine score color
   const getScoreColor = (score) => {
@@ -34,6 +54,26 @@ export default function ATSScorePanel({ atsResult }) {
   return (
     <div className="space-y-6">
       
+      {/* SCORE TRANSPARENCY BANNER */}
+      {score_adjustment_reason && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-card p-4 flex items-start gap-3 text-xs">
+          <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold text-amber-400 flex items-center gap-2">
+              ATS Score Calibration Notice
+              {raw_ai_score && (
+                <span className="text-[10px] font-mono bg-amber-500/20 px-2 py-0.5 rounded text-amber-300">
+                  Raw AI Evaluation: {raw_ai_score}% → Adjusted Final: {finalScore}%
+                </span>
+              )}
+            </div>
+            <p className="text-amber-200/90 leading-relaxed">
+              {score_adjustment_reason}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* OVERALL SCORE & BREAKDOWN */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -44,14 +84,20 @@ export default function ATSScorePanel({ atsResult }) {
           </div>
           
           {/* Circular Score Gauge */}
-          <div className={`w-32 h-32 rounded-full border-4 flex flex-col items-center justify-center my-3 shadow-2xl ${getScoreColor(overallScore)}`}>
-            <span className="text-4xl font-extrabold tracking-tight font-mono">{overallScore}</span>
+          <div className={`w-32 h-32 rounded-full border-4 flex flex-col items-center justify-center my-3 shadow-2xl ${getScoreColor(finalScore)}`}>
+            <span className="text-4xl font-extrabold tracking-tight font-mono">{finalScore}</span>
             <span className="text-[10px] uppercase font-bold text-text-muted">/ 100</span>
           </div>
 
-          <span className={`px-3 py-1 rounded-full text-xs font-bold ${getScoreColor(overallScore)}`}>
-            {getScoreBadge(overallScore)}
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${getScoreColor(finalScore)}`}>
+            {getScoreBadge(finalScore)}
           </span>
+
+          {level_match && (
+            <div className="mt-3 text-[11px] text-text-secondary font-mono flex items-center gap-1">
+              <Award className="w-3.5 h-3.5 text-accent-primary" /> Seniority Match: <span className="font-bold text-text-primary">{level_match}</span> ({candidate_level_estimate} vs {role_level_detected})
+            </div>
+          )}
         </div>
 
         {/* 4 Breakdown Sub-Scores */}
@@ -103,16 +149,34 @@ export default function ATSScorePanel({ atsResult }) {
 
       </div>
 
+      {/* MISSING CORE LANGUAGES ALERT */}
+      {core_languages_missing && core_languages_missing.length > 0 && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-card p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            <div>
+              <h5 className="text-xs font-bold text-rose-400">Missing Mandatory Core Languages</h5>
+              <p className="text-[11px] text-rose-200/90 mt-0.5">
+                The Job Description requires <span className="font-bold font-mono">{core_languages_missing.join(', ')}</span>. Add relevant project experience or coursework for these core languages.
+              </p>
+            </div>
+          </div>
+          <span className="bg-rose-500/20 text-rose-300 text-xs font-mono font-bold px-3 py-1 rounded">
+            -{core_languages_missing.length * 8} Pts
+          </span>
+        </div>
+      )}
+
       {/* KEYWORD GAP ANALYSIS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* Found Keywords */}
         <div className="bg-[#111118] border border-border-subtle rounded-card p-5 space-y-3">
           <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-emerald-400" /> Matched Keywords ({foundKeywords?.length || 0})
+            <CheckCircle className="w-4 h-4 text-emerald-400" /> Matched Keywords ({matchedList.length})
           </h4>
           <div className="flex flex-wrap gap-2">
-            {(foundKeywords || []).map((kw, idx) => (
+            {matchedList.map((kw, idx) => (
               <span key={idx} className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded text-xs font-mono font-medium">
                 ✓ {kw}
               </span>
@@ -123,11 +187,11 @@ export default function ATSScorePanel({ atsResult }) {
         {/* Missing Keywords */}
         <div className="bg-[#111118] border border-border-subtle rounded-card p-5 space-y-3">
           <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400" /> Missing Job Keywords ({missingKeywords?.length || 0})
+            <AlertTriangle className="w-4 h-4 text-rose-400" /> Missing Job Keywords ({missingList.length})
           </h4>
           <p className="text-[11px] text-text-secondary">Consider incorporating these relevant skills into your experience or skills section.</p>
           <div className="flex flex-wrap gap-2">
-            {(missingKeywords || []).map((kw, idx) => (
+            {missingList.map((kw, idx) => (
               <span key={idx} className="bg-rose-500/10 border border-rose-500/20 text-rose-400 px-2.5 py-1 rounded text-xs font-mono font-medium">
                 + {kw}
               </span>

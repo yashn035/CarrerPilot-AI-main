@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { Play, Send, Loader2, Code2 } from 'lucide-react';
 
@@ -17,8 +17,12 @@ export default function EditorPanel({
   onRun,
   onSubmit,
   running,
-  submitting
+  submitting,
+  compileError
 }) {
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+
   const getMonacoLanguage = (lang) => {
     switch (lang) {
       case 'python': return 'python';
@@ -28,19 +32,50 @@ export default function EditorPanel({
     }
   };
 
+  const handleEditorDidMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+  };
+
+  // Set red squiggle marker for compilation errors with line numbers
+  useEffect(() => {
+    if (monacoRef.current && editorRef.current) {
+      const monaco = monacoRef.current;
+      const model = editorRef.current.getModel();
+      
+      if (compileError?.line && model) {
+        const lineNum = Math.min(compileError.line, model.getLineCount());
+        monaco.editor.setModelMarkers(model, 'compiler', [
+          {
+            startLineNumber: lineNum,
+            startColumn: 1,
+            endLineNumber: lineNum,
+            endColumn: 100,
+            message: compileError.message || 'Compilation Error',
+            severity: monaco.MarkerSeverity.Error
+          }
+        ]);
+      } else if (model) {
+        monaco.editor.setModelMarkers(model, 'compiler', []);
+      }
+    }
+  }, [compileError]);
+
   return (
-    <div className="flex flex-col h-full bg-background-surface border border-border-subtle rounded-card overflow-hidden">
+    <div className="flex flex-col h-full bg-[#111118] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
       {/* Editor Header Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-background-elevated border-b border-border-subtle">
+      <div className="flex items-center justify-between px-4 py-3 bg-[#14141f] border-b border-gray-800/80">
+        
+        {/* Language selector */}
         <div className="flex items-center gap-2">
-          <Code2 className="w-4 h-4 text-accent-primary" />
+          <Code2 className="w-4 h-4 text-indigo-400" />
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="bg-background-surface border border-border-subtle rounded px-3 py-1 text-xs text-text-primary outline-none focus:border-accent-primary font-medium"
+            className="bg-[#181824] border border-gray-800 focus:border-indigo-500 rounded-xl px-3 py-1.5 text-xs text-white outline-none font-semibold cursor-pointer transition-colors"
           >
             {LANGUAGE_VERSIONS.map((lang) => (
-              <option key={lang.id} value={lang.id}>
+              <option key={lang.id} value={lang.id} className="bg-[#181824]">
                 {lang.label}
               </option>
             ))}
@@ -52,12 +87,12 @@ export default function EditorPanel({
           <button
             onClick={onRun}
             disabled={running || submitting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-background-surface hover:bg-background-elevated border border-border-subtle text-text-primary transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[#181824] hover:bg-gray-800 border border-gray-800 text-white transition-all disabled:opacity-50"
           >
             {running ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-accent-primary" />
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
             ) : (
-              <Play className="w-3.5 h-3.5 text-green-400 fill-green-400" />
+              <Play className="w-4 h-4 text-emerald-400 fill-emerald-400" />
             )}
             <span>Run Code</span>
           </button>
@@ -65,25 +100,26 @@ export default function EditorPanel({
           <button
             onClick={onSubmit}
             disabled={running || submitting}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold bg-accent-primary hover:bg-accent-primary/90 text-white transition-all shadow-glow disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
           >
             {submitting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-4 h-4" />
             )}
             <span>Submit Solution</span>
           </button>
         </div>
       </div>
 
-      {/* Monaco Editor Component */}
-      <div className="flex-1 min-h-[350px] relative">
+      {/* Monaco Editor Container */}
+      <div className="flex-1 min-h-[380px] relative">
         <Editor
           height="100%"
           language={getMonacoLanguage(language)}
           value={code}
           onChange={(val) => setCode(val || '')}
+          onMount={handleEditorDidMount}
           theme="vs-dark"
           options={{
             minimap: { enabled: false },

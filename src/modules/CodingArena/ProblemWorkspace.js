@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, BookOpen, Clock, FileCode2, Sparkles, Loader2 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import EditorPanel from './EditorPanel';
-import ResultsPanel from './ResultsPanel';
+import TestResultsPanel from './TestResultsPanel';
 import BlindModeToggle from './BlindModeToggle';
 import { useUser } from '../../context/UserContext';
 
@@ -9,8 +10,15 @@ export default function ProblemWorkspace({ problem, onBack }) {
   const { getAuthHeaders } = useUser();
   const [fullProblem, setFullProblem] = useState(problem);
   const [loadingDetail, setLoadingDetail] = useState(false);
+
   const [language, setLanguage] = useState('javascript');
-  const [code, setCode] = useState('');
+  const [codeByLanguage, setCodeByLanguage] = useState({
+    javascript: '',
+    python: '',
+    java: '',
+    cpp: ''
+  });
+
   const [running, setRunning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [execResult, setExecResult] = useState(null);
@@ -20,7 +28,7 @@ export default function ProblemWorkspace({ problem, onBack }) {
   const [blindMode, setBlindMode] = useState(false);
   const [peeksRemaining, setPeeksRemaining] = useState(3);
 
-  // Fetch full problem details if description is missing
+  // Fetch full problem details if description missing
   useEffect(() => {
     if (problem) {
       const probId = problem.id || problem.titleSlug;
@@ -44,25 +52,50 @@ export default function ProblemWorkspace({ problem, onBack }) {
   }, [problem]);
 
   const activeProb = fullProblem || problem;
-  const problemId = activeProb.id || activeProb.titleSlug;
+  const problemId = activeProb?.id || activeProb?.titleSlug;
 
-  // Populate code template when activeProb or language changes
+  // Initialize per-language starter code when activeProb changes
   useEffect(() => {
     if (activeProb) {
-      const starter =
-        activeProb.starterCode?.[language] ||
-        (language === 'python'
-          ? 'def solution():\n    # Write python solution here\n    pass'
-          : language === 'java'
-          ? 'class Solution {\n    // Write java solution here\n}'
-          : language === 'cpp'
-          ? 'class Solution {\npublic:\n    // Write C++ solution here\n};'
-          : 'function solution() {\n  // Write JavaScript solution here\n}');
-      setCode(starter);
+      const starters = {
+        javascript:
+          activeProb.starterCode?.javascript ||
+          'function solution() {\n  // Write JavaScript solution here\n}',
+        python:
+          activeProb.starterCode?.python ||
+          'class Solution:\n    def solution(self):\n        pass',
+        java:
+          activeProb.starterCode?.java ||
+          'class Solution {\n    public void solution() {\n        \n    }\n}',
+        cpp:
+          activeProb.starterCode?.cpp ||
+          'class Solution {\npublic:\n    void solution() {\n        \n    }\n};'
+      };
+
+      setCodeByLanguage(starters);
     }
-  }, [activeProb, language]);
+  }, [activeProb]);
 
   if (!activeProb) return null;
+
+  const currentCode = codeByLanguage[language] || '';
+
+  const handleCodeChange = (newCode) => {
+    setCodeByLanguage(prev => ({
+      ...prev,
+      [language]: newCode
+    }));
+  };
+
+  const fireConfetti = () => {
+    try {
+      confetti({
+        particleCount: 120,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    } catch {}
+  };
 
   const handleRun = async () => {
     setRunning(true);
@@ -72,11 +105,14 @@ export default function ProblemWorkspace({ problem, onBack }) {
       const res = await fetch(`/api/coding/${problemId}/run`, {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language })
+        body: JSON.stringify({ code: currentCode, language })
       });
       if (res.ok) {
         const data = await res.json();
         setExecResult(data);
+        if (data.status === 'accepted' || data.success) {
+          fireConfetti();
+        }
       }
     } catch (e) {
       console.error('Run failed:', e);
@@ -93,11 +129,14 @@ export default function ProblemWorkspace({ problem, onBack }) {
       const res = await fetch(`/api/coding/${problemId}/submit`, {
         method: 'POST',
         headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language })
+        body: JSON.stringify({ code: currentCode, language })
       });
       if (res.ok) {
         const data = await res.json();
         setExecResult(data);
+        if (data.status === 'accepted' || data.success) {
+          fireConfetti();
+        }
       }
     } catch (e) {
       console.error('Submission failed:', e);
@@ -109,30 +148,31 @@ export default function ProblemWorkspace({ problem, onBack }) {
   return (
     <div className="max-w-7xl mx-auto w-full p-4 space-y-4">
       {/* Top Header Navigation Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-background-surface border border-border-subtle p-3.5 rounded-card shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-[#111118] border border-gray-800 p-4 rounded-2xl shadow-lg">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="p-1.5 rounded hover:bg-background-elevated border border-border-subtle text-text-secondary hover:text-text-primary transition-colors"
+            className="p-2 rounded-xl hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-white transition-colors"
+            title="Back to Problem Browser"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-text-primary text-base">{activeProb.title}</h2>
+              <h2 className="font-bold text-white text-base">{activeProb.title}</h2>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                   activeProb.difficulty === 'Easy'
-                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                     : activeProb.difficulty === 'Medium'
-                    ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
-                    : 'bg-red-500/10 text-red-400 border-red-500/20'
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                 }`}
               >
                 {activeProb.difficulty}
               </span>
             </div>
-            <span className="text-xs text-text-muted">{activeProb.category || 'Algorithms'}</span>
+            <span className="text-xs text-gray-400">{activeProb.category || 'Algorithms'}</span>
           </div>
         </div>
 
@@ -147,14 +187,15 @@ export default function ProblemWorkspace({ problem, onBack }) {
 
       {/* Main Split Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Pane: Problem Description (5/12 cols) */}
-        <div className="lg:col-span-5 flex flex-col h-[700px] bg-background-surface border border-border-subtle rounded-card overflow-hidden shadow-sm">
-          <div className="p-3 bg-background-elevated border-b border-border-subtle flex items-center justify-between text-xs font-semibold text-text-secondary">
+        
+        {/* Left Pane: Problem Description */}
+        <div className="lg:col-span-5 flex flex-col h-[740px] bg-[#111118] border border-gray-800 rounded-2xl overflow-hidden shadow-lg">
+          <div className="p-4 bg-[#14141f] border-b border-gray-800/80 flex items-center justify-between text-xs font-semibold text-gray-300">
             <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-accent-primary" />
+              <BookOpen className="w-4 h-4 text-indigo-400" />
               <span>Problem Description</span>
             </div>
-            {loadingDetail && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent-primary" />}
+            {loadingDetail && <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />}
           </div>
 
           <div
@@ -162,36 +203,36 @@ export default function ProblemWorkspace({ problem, onBack }) {
               blindMode ? 'backdrop-blur-md opacity-20 filter select-none' : ''
             }`}
           >
-            {/* Description Text / HTML */}
+            {/* Description Text */}
             {activeProb.description ? (
               <div
-                className="prose prose-invert prose-xs text-text-secondary leading-relaxed max-w-none space-y-3"
+                className="prose prose-invert prose-xs text-gray-300 leading-relaxed max-w-none space-y-3"
                 dangerouslySetInnerHTML={{ __html: activeProb.description }}
               />
             ) : (
-              <div className="text-xs text-text-muted italic p-4">Loading problem description...</div>
+              <div className="text-xs text-gray-500 italic p-4">Loading problem description...</div>
             )}
 
             {/* Examples List */}
             {Array.isArray(activeProb.examples) && activeProb.examples.length > 0 && (
               <div className="space-y-4 pt-2">
-                <h4 className="font-bold text-xs text-text-primary">Examples</h4>
+                <h4 className="font-bold text-xs text-white">Examples</h4>
                 {activeProb.examples.map((ex, idx) => (
-                  <div key={idx} className="bg-background-elevated p-3 rounded border border-border-subtle space-y-1 text-xs font-mono">
+                  <div key={idx} className="bg-[#181824] p-3.5 rounded-xl border border-gray-800/80 space-y-1 text-xs font-mono">
                     {ex.input && (
                       <div>
-                        <span className="text-text-muted font-sans font-semibold">Input: </span>
-                        <code className="text-text-primary">{ex.input}</code>
+                        <span className="text-gray-400 font-sans font-semibold">Input: </span>
+                        <code className="text-white">{ex.input}</code>
                       </div>
                     )}
                     {ex.output && (
                       <div>
-                        <span className="text-text-muted font-sans font-semibold">Output: </span>
-                        <code className="text-accent-primary">{ex.output}</code>
+                        <span className="text-gray-400 font-sans font-semibold">Output: </span>
+                        <code className="text-indigo-400">{ex.output}</code>
                       </div>
                     )}
                     {ex.explanation && (
-                      <div className="text-text-secondary font-sans text-[11px] pt-1 italic">
+                      <div className="text-gray-400 font-sans text-[11px] pt-1 italic">
                         Explanation: {ex.explanation}
                       </div>
                     )}
@@ -203,8 +244,8 @@ export default function ProblemWorkspace({ problem, onBack }) {
             {/* Constraints */}
             {Array.isArray(activeProb.constraints) && activeProb.constraints.length > 0 && (
               <div className="space-y-2 pt-2">
-                <h4 className="font-bold text-xs text-text-primary">Constraints</h4>
-                <ul className="list-disc list-inside space-y-1 text-xs text-text-secondary font-mono">
+                <h4 className="font-bold text-xs text-white">Constraints</h4>
+                <ul className="list-disc list-inside space-y-1 text-xs text-gray-400 font-mono">
                   {activeProb.constraints.map((c, idx) => (
                     <li key={idx}>{c}</li>
                   ))}
@@ -214,23 +255,24 @@ export default function ProblemWorkspace({ problem, onBack }) {
           </div>
         </div>
 
-        {/* Right Pane: Monaco Editor & Output Results (7/12 cols) */}
-        <div className="lg:col-span-7 flex flex-col h-[700px] overflow-y-auto space-y-4">
+        {/* Right Pane: Monaco Editor & Output Results */}
+        <div className="lg:col-span-7 flex flex-col h-[740px] overflow-y-auto space-y-4">
           <div className="flex-1">
             <EditorPanel
               language={language}
               setLanguage={setLanguage}
-              code={code}
-              setCode={setCode}
+              code={currentCode}
+              setCode={handleCodeChange}
               onRun={handleRun}
               onSubmit={handleSubmit}
               running={running}
               submitting={submitting}
+              compileError={execResult?.compileError}
             />
           </div>
 
-          {/* Execution Results & AI Autopsy */}
-          <ResultsPanel result={execResult} isSubmission={isSubmission} />
+          {/* Execution Results */}
+          <TestResultsPanel result={execResult} isSubmission={isSubmission} />
         </div>
       </div>
     </div>

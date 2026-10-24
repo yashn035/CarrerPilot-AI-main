@@ -20,8 +20,11 @@ import groqRouter from '../domains/resumes/routes/groq.routes.js';
 // Coding Controller Imports for OA and Company tracks
 import {
   handleStartOa,
-  handleSubmitOaProblem,
-  handleEndOa,
+  handleSubmitOaAnswer as handleSubmitOaProblem,
+  handleEndOa
+} from '../domains/coding/controller/oa.controller.js';
+
+import {
   handleGetCompanyTracks,
   handleGetCompanyMeta,
   handleGetCompanyQuestions,

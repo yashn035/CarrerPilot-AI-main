@@ -77,3 +77,44 @@ export async function handleGetCompanyTracks(req, res) {
     return res.status(500).json({ message: err.message || 'Failed to fetch company tracks' });
   }
 }
+
+export async function handleGetCompanyMeta(req, res) {
+  try {
+    const { company } = req.params;
+    const tracks = codingService.getCompanyTracks();
+    const meta = tracks.companyMeta?.[company] || { name: company, totalQuestions: 0, easy: 0, medium: 0, hard: 0 };
+    return res.status(200).json(meta);
+  } catch (err) {
+    return res.status(500).json({ message: err.message || 'Failed to fetch company meta' });
+  }
+}
+
+export async function handleGetCompanyQuestions(req, res) {
+  try {
+    const { company } = req.params;
+    const tracks = codingService.getCompanyTracks();
+    const questions = tracks.companyQuestions?.[company] || [];
+    return res.status(200).json(questions);
+  } catch (err) {
+    return res.status(500).json({ message: err.message || 'Failed to fetch company questions' });
+  }
+}
+
+export async function handleGetCompanyAnalytics(req, res) {
+  try {
+    const { company } = req.params;
+    return res.status(200).json({ company, solvedCount: 0, accuracy: 0, topicFrequency: {} });
+  } catch (err) {
+    return res.status(500).json({ message: err.message || 'Failed to fetch company analytics' });
+  }
+}
+
+export async function handleGetCompanyAiGuide(req, res) {
+  try {
+    const { company } = req.params;
+    return res.status(200).json({ company, guide: `Preparation guide for ${company}` });
+  } catch (err) {
+    return res.status(500).json({ message: err.message || 'Failed to fetch company AI guide' });
+  }
+}
+

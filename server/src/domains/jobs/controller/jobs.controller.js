@@ -1,8 +1,8 @@
-import * as jobsService from '../service/jobs.service.js';
+import * as jobService from '../services/job.service.js';
 
 export async function handleGetJobs(req, res) {
   try {
-    const jobs = await jobsService.getJobsList();
+    const jobs = await jobService.getJobsList();
     return res.json(jobs);
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -11,7 +11,8 @@ export async function handleGetJobs(req, res) {
 
 export async function handleGetApplications(req, res) {
   try {
-    const apps = await jobsService.getJobApplications(req.userId);
+    const { search, stage, sort } = req.query;
+    const apps = await jobService.getApplications(req.userId, { search, stage, sort });
     return res.json(apps);
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -20,7 +21,7 @@ export async function handleGetApplications(req, res) {
 
 export async function handleCreateApplication(req, res) {
   try {
-    const result = await jobsService.createJobApplication(req.userId, req.body);
+    const result = await jobService.createApplication(req.userId, req.body);
     return res.status(201).json(result);
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -30,10 +31,22 @@ export async function handleCreateApplication(req, res) {
 export async function handleUpdateApplication(req, res) {
   const { id } = req.params;
   try {
-    const app = await jobsService.updateJobApplication(req.userId, id, req.body);
+    const app = await jobService.updateApplication(id, req.userId, req.body);
     return res.json({ application: app });
   } catch (err) {
-    const statusCode = err.message === "Application not found" ? 404 : 500;
+    const statusCode = err.message === 'Application not found' ? 404 : 500;
+    return res.status(statusCode).json({ message: err.message });
+  }
+}
+
+export async function handleUpdateStage(req, res) {
+  const { id } = req.params;
+  const { stage } = req.body;
+  try {
+    const app = await jobService.updateStage(id, req.userId, stage);
+    return res.json({ application: app });
+  } catch (err) {
+    const statusCode = err.message === 'Application not found' ? 404 : 500;
     return res.status(statusCode).json({ message: err.message });
   }
 }
@@ -41,10 +54,29 @@ export async function handleUpdateApplication(req, res) {
 export async function handleDeleteApplication(req, res) {
   const { id } = req.params;
   try {
-    await jobsService.deleteJobApplication(req.userId, id);
+    await jobService.deleteApplication(id, req.userId);
     return res.json({ success: true });
   } catch (err) {
-    const statusCode = err.message === "Application not found" ? 404 : 500;
+    const statusCode = err.message === 'Application not found' ? 404 : 500;
     return res.status(statusCode).json({ message: err.message });
   }
 }
+
+export async function handleGetStats(req, res) {
+  try {
+    const stats = await jobService.getStats(req.userId);
+    return res.json(stats);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+export default {
+  handleGetJobs,
+  handleGetApplications,
+  handleCreateApplication,
+  handleUpdateApplication,
+  handleUpdateStage,
+  handleDeleteApplication,
+  handleGetStats
+};

@@ -17,37 +17,53 @@ export default function UploadAnalyzer({ currentResumeData }) {
   };
 
   const handleAnalyze = async () => {
+    console.log('[UploadAnalyzer] Starting ATS analysis execution...', { mode, hasFile: !!file, jobTitle });
     setAnalyzing(true);
     try {
       const formData = new FormData();
-      formData.append('jobTitle', jobTitle);
-      formData.append('jobDescription', jobDescription);
+      formData.append('jobTitle', jobTitle || 'Software Engineer');
+      formData.append('jobDescription', jobDescription || '');
 
       if (mode === 'upload' && file) {
         formData.append('resumeFile', file);
+        console.log('[UploadAnalyzer] Appended PDF file to FormData:', file.name);
       } else {
-        // Send JSON representation as text
-        formData.append('resumeText', JSON.stringify(currentResumeData));
+        // Send JSON representation or extracted text
+        const formattedResumeText = typeof currentResumeData === 'string'
+          ? currentResumeData
+          : JSON.stringify(currentResumeData, null, 2);
+        formData.append('resumeText', formattedResumeText);
+        console.log('[UploadAnalyzer] Appended resume text payload to FormData.');
       }
+
+      const token = localStorage.getItem('token');
+      console.log('[UploadAnalyzer] Sending fetch request to /api/resumes/groq/analyze-ats...');
 
       const res = await fetch('/api/resumes/groq/analyze-ats', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         body: formData
       });
 
+      console.log('[UploadAnalyzer] HTTP Response status:', res.status);
       const data = await res.json();
-      if (data.status === 'success') {
-        setAtsResult(data.data);
+      console.log('[UploadAnalyzer] Received JSON payload:', data);
+
+      if (res.ok && (data.status === 'success' || data.overallScore)) {
+        setAtsResult(data.data || data);
+      } else {
+        const errorMsg = data.message || data.error || 'Failed to complete ATS Analysis';
+        console.error('[UploadAnalyzer] Server reported error:', errorMsg);
+        alert(`ATS Analysis Notice: ${errorMsg}`);
       }
     } catch (e) {
-      console.error('ATS Analysis Error:', e);
+      console.error('[UploadAnalyzer] ATS Analysis Fetch Exception:', e);
+      alert(`Network Error: ${e.message}`);
     } finally {
       setAnalyzing(false);
     }
   };
+
 
   return (
     <div className="space-y-6">

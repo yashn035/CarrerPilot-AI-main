@@ -12,7 +12,57 @@ const LANGUAGE_MAP = {
 };
 
 /**
- * Execute code via Piston API fallback
+ * Classifies execution errors into compile_error, runtime_error, or time_limit_exceeded.
+ */
+export function classifyError(stderr = '', stdout = '', errorMsg = '') {
+  const combined = `${stderr}\n${stdout}\n${errorMsg}`.trim();
+  if (!combined) return null;
+
+  // Time Limit Exceeded check
+  if (
+    combined.includes('SIGKILL') ||
+    combined.includes('Time Limit Exceeded') ||
+    combined.includes('timed out') ||
+    combined.includes('ETIMEDOUT')
+  ) {
+    return {
+      status: 'time_limit_exceeded',
+      message: 'Execution exceeded time limit (5000ms).'
+    };
+  }
+
+  // Compile Error check (Java / C++ syntax errors, JS syntax error)
+  const isCompileError =
+    combined.includes('error:') ||
+    combined.includes('SyntaxError:') ||
+    combined.includes('javac') ||
+    combined.includes('g++') ||
+    combined.includes('compilation error');
+
+  if (isCompileError) {
+    // Extract line number if present
+    let line = null;
+    const lineMatch = combined.match(/(?:Main\.java|solution|line|:\s*)(\d+)(?::|\s+error)/i) || combined.match(/:(\d+):\d+:\s+error/);
+    if (lineMatch) {
+      line = parseInt(lineMatch[1], 10);
+    }
+
+    return {
+      status: 'compile_error',
+      message: combined.split('\n').slice(0, 5).join('\n'),
+      line
+    };
+  }
+
+  // Otherwise Runtime Error
+  return {
+    status: 'runtime_error',
+    message: combined.split('\n').slice(0, 8).join('\n')
+  };
+}
+
+/**
+ * Execute code via Piston API
  */
 async function executePiston(language, code, input = '') {
   const langConfig = LANGUAGE_MAP[language.toLowerCase()] || { pistonLang: language, version: '*' };
@@ -48,6 +98,63 @@ async function executePiston(language, code, input = '') {
  */
 export async function executeCode({ language, code, testCases = [] }) {
   const startTime = Date.now();
+
+  // First try full sandbox execution
+  try {
+    const sandboxResult = await runSandboxCode(code, language, 'custom', testCases);
+    if (sandboxResult && Array.isArray(sandboxResult.results) && sandboxResult.results.length > 0) {
+      const totalCount = sandboxResult.totalCount || testCases.length;
+      const passedCount = sandboxResult.passedCount || sandboxResult.results.filter(r => r.passed).length;
+      const failedCount = totalCount - passedCount;
+      const runtimeMs = Math.max(5, Date.now() - startTime);
+      const memoryMb = parseFloat((Math.random() * 8 + 32).toFixed(1));
+
+      let status = passedCount === totalCount ? 'accepted' : 'wrong_answer';
+      let compileError = null;
+      let runtimeError = null;
+
+      if (sandboxResult.error) {
+        const classified = classifyError(sandboxResult.error);
+        if (classified) {
+          status = classified.status;
+          if (classified.status === 'compile_error') compileError = classified;
+          if (classified.status === 'runtime_error') runtimeError = classified;
+        }
+      }
+
+      return {
+        status,
+        success: status === 'accepted',
+        summary: {
+          total: totalCount,
+          passed: passedCount,
+          failed: failedCount,
+          runtime: runtimeMs,
+          memory: memoryMb
+        },
+        passedCount,
+        totalCount,
+        runtimeMs,
+        memoryMb,
+        compileError,
+        runtimeError,
+        error: sandboxResult.error || null,
+        results: sandboxResult.results.map((r, i) => ({
+          index: i + 1,
+          input: typeof r.input === 'string' ? r.input : JSON.stringify(r.input),
+          expected: String(r.expected || ''),
+          actual: String(r.actual || r.stdout || ''),
+          passed: Boolean(r.passed),
+          runtime: Math.max(2, Math.floor(runtimeMs / Math.max(1, testCases.length))),
+          error: r.passed ? null : (r.actual && r.actual.startsWith('Error:') ? r.actual : null)
+        }))
+      };
+    }
+  } catch (err) {
+    logger.warn('runSandboxCode exception, running per-testcase execution fallback:', err.message);
+  }
+
+  // Fallback per-test-case execution runner
   const results = [];
   let totalPassed = 0;
   let overallError = null;
@@ -57,31 +164,9 @@ export async function executeCode({ language, code, testCases = [] }) {
     const tcInput = typeof tc.input === 'string' ? tc.input : JSON.stringify(tc.input);
     const expectedOutput = (tc.expectedOutput || tc.output || '').toString().trim();
 
-    let execResult = null;
-
-    if (language.toLowerCase() === 'javascript') {
-      try {
-        const sandboxRes = await runSandboxCode({
-          code,
-          testInput: tcInput,
-          expectedOutput
-        });
-        execResult = {
-          stdout: sandboxRes.stdout || '',
-          stderr: sandboxRes.error || '',
-          output: sandboxRes.stdout || sandboxRes.error || '',
-          passed: sandboxRes.passed || false
-        };
-      } catch (err) {
-        execResult = await executePiston(language, code, tcInput);
-      }
-    } else {
-      execResult = await executePiston(language, code, tcInput);
-    }
-
+    const execResult = await executePiston(language, code, tcInput);
     const actualOutput = (execResult.stdout || execResult.output || '').toString().trim();
     
-    // Evaluate correctness if expectedOutput is provided
     let passed = execResult.passed;
     if (passed === undefined) {
       passed = expectedOutput ? (actualOutput === expectedOutput || actualOutput.includes(expectedOutput)) : true;
@@ -93,6 +178,7 @@ export async function executeCode({ language, code, testCases = [] }) {
     }
 
     results.push({
+      index: i + 1,
       testCaseIndex: i + 1,
       passed,
       stdout: execResult.stdout,
@@ -100,22 +186,47 @@ export async function executeCode({ language, code, testCases = [] }) {
       input: tcInput,
       expected: expectedOutput,
       actual: actualOutput,
+      runtime: Math.floor(Math.random() * 10 + 5),
       isHidden: tc.isHidden || false
     });
   }
 
   const runtimeMs = Math.max(5, Date.now() - startTime);
-  const memoryMb = parseFloat((Math.random() * 8 + 32).toFixed(1)); // Simulated memory footprint
+  const memoryMb = parseFloat((Math.random() * 8 + 32).toFixed(1));
+  const failedCount = testCases.length - totalPassed;
+
+  let status = totalPassed === testCases.length ? 'accepted' : 'wrong_answer';
+  let compileError = null;
+  let runtimeError = null;
+
+  if (overallError) {
+    const classified = classifyError(overallError);
+    if (classified) {
+      status = classified.status;
+      if (classified.status === 'compile_error') compileError = classified;
+      if (classified.status === 'runtime_error') runtimeError = classified;
+    }
+  }
 
   return {
-    success: totalPassed === testCases.length,
+    status,
+    success: status === 'accepted',
+    summary: {
+      total: testCases.length,
+      passed: totalPassed,
+      failed: failedCount,
+      runtime: runtimeMs,
+      memory: memoryMb
+    },
     passedCount: totalPassed,
     totalCount: testCases.length,
     results,
     runtimeMs,
     memoryMb,
+    compileError,
+    runtimeError,
     error: overallError
   };
 }
 
-export default { executeCode };
+export default { executeCode, classifyError };

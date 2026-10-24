@@ -195,15 +195,23 @@ const OaSessionSchema = new mongoose.Schema({
 const JobApplicationSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
   userId: { type: String, required: true, index: true },
-  company: String,
-  role: String,
-  stage: String,
-  salary: String,
-  location: String,
-  notes: String,
+  company: { type: String, required: true },
+  role: { type: String, required: true },
+  stage: { type: String, default: 'applied' },
+  salary: { type: String, default: '' },
+  location: { type: String, default: '' },
+  jobUrl: { type: String, default: '' },
+  appliedDate: { type: Date, default: Date.now },
+  notes: { type: String, default: '' },
+  history: [
+    {
+      stage: String,
+      movedAt: { type: Date, default: Date.now }
+    }
+  ],
   reminderDate: String,
   updatedAt: String
-});
+}, { timestamps: true });
 
 // 12. Project Schema
 const ProjectSchema = new mongoose.Schema({
