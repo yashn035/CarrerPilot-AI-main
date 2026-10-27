@@ -82,12 +82,30 @@ export function postProcessATSScore(rawAiResult = {}, jdText = '', resumeText = 
   const finalAtsScore = Math.max(0, Math.min(100, Math.round(adjustedScore)));
 
   // Format adjustment summary string
+  const pointsReduced = Math.max(0, rawScore - finalAtsScore);
   let scoreAdjustmentReason = '';
   if (reasons.length > 0) {
-    scoreAdjustmentReason = `Reduced by ${rawScore - finalAtsScore} points: ${reasons.join('. ')}.`;
+    if (pointsReduced > 0) {
+      scoreAdjustmentReason = `Calibrated score reduced by ${pointsReduced} pts: ${reasons.join('. ')}.`;
+    } else {
+      scoreAdjustmentReason = `Score calibrated: ${reasons.join('. ')}.`;
+    }
   } else {
     scoreAdjustmentReason = 'Score fully verified with high ATS keyword alignment.';
   }
+
+  // Synchronize breakdown scores with keyword density and penalties
+  const verifiedKeywordScore = totalKeywordsCount > 0
+    ? Math.round((detected.length / totalKeywordsCount) * 100)
+    : 80;
+
+  const baseBreakdown = rawAiResult.breakdown || {};
+  const calibratedBreakdown = {
+    formattingScore: Number(baseBreakdown.formattingScore || 85),
+    keywordScore: verifiedKeywordScore,
+    contentScore: Math.max(0, Math.min(100, Number(baseBreakdown.contentScore || 82) - (coreLanguagesMissing.length * 5))),
+    impactScore: Math.max(0, Math.min(100, Number(baseBreakdown.impactScore || 80) - (isSeniorJd && isEntryResume ? 5 : 0)))
+  };
 
   // Return complete standardized output object
   return {
@@ -104,12 +122,7 @@ export function postProcessATSScore(rawAiResult = {}, jdText = '', resumeText = 
     role_level_detected: roleLevelDetected,
     candidate_level_estimate: candidateLevelEstimate,
     level_match: levelMatch,
-    breakdown: rawAiResult.breakdown || {
-      formattingScore: 85,
-      keywordScore: Math.round((detected.length / (totalKeywordsCount || 1)) * 100),
-      contentScore: 82,
-      impactScore: 80
-    },
+    breakdown: calibratedBreakdown,
     bulletSuggestions: rawAiResult.bulletSuggestions || rawAiResult.bullet_suggestions || [],
     sectionFeedback: rawAiResult.sectionFeedback || rawAiResult.section_feedback || {}
   };

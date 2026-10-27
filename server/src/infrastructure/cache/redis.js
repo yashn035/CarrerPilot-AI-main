@@ -37,24 +37,33 @@ class InMemoryCache {
     const now = Date.now();
     const windowMs = windowSeconds * 1000;
     
-    if (!this.rateLimits.has(key)) {
-      this.rateLimits.set(key, []);
+    // Prune stale keys if map exceeds 500 entries to prevent memory leaks
+    if (this.rateLimits.size > 500) {
+      for (const [k, v] of this.rateLimits.entries()) {
+        const valid = v.filter(ts => now - ts < windowMs);
+        if (valid.length === 0) {
+          this.rateLimits.delete(k);
+        } else {
+          this.rateLimits.set(k, valid);
+        }
+      }
     }
     
-    let timestamps = this.rateLimits.get(key);
-    // Filter timestamps within the sliding window
+    let timestamps = this.rateLimits.get(key) || [];
     timestamps = timestamps.filter(ts => now - ts < windowMs);
     
     if (timestamps.length >= limit) {
       this.rateLimits.set(key, timestamps);
-      return { allowed: false, remaining: 0, resetMs: windowMs - (now - timestamps[0]) };
+      const oldestTs = timestamps[0] || now;
+      const resetMs = Math.max(0, windowMs - (now - oldestTs));
+      return { allowed: false, remaining: 0, resetMs };
     }
     
     timestamps.push(now);
     this.rateLimits.set(key, timestamps);
     return { 
       allowed: true, 
-      remaining: limit - timestamps.length, 
+      remaining: Math.max(0, limit - timestamps.length), 
       resetMs: windowMs 
     };
   }
@@ -169,20 +178,24 @@ class CacheService {
         tx.expire(key, windowSeconds);
         
         const results = await tx.exec();
-        const count = results[1][1];
-        const oldestEntry = results[3][1];
+        const count = results?.[1]?.[1] ?? 0;
+        const oldestEntry = results?.[3]?.[1];
         
         if (count >= limit) {
           // Remove the entry we just added to keep size constant
           await this.client.zremrangebyscore(key, now, now);
-          const oldestTime = parseFloat(oldestEntry[0].split('-')[0]);
-          const resetMs = (windowSeconds * 1000) - (now - oldestTime);
+          let oldestTime = now - (windowSeconds * 1000);
+          if (Array.isArray(oldestEntry) && oldestEntry.length > 0 && typeof oldestEntry[0] === 'string') {
+            const parsedTime = parseFloat(oldestEntry[0].split('-')[0]);
+            if (!isNaN(parsedTime)) oldestTime = parsedTime;
+          }
+          const resetMs = Math.max(0, (windowSeconds * 1000) - (now - oldestTime));
           return { allowed: false, remaining: 0, resetMs };
         }
         
         return { 
           allowed: true, 
-          remaining: limit - count - 1, 
+          remaining: Math.max(0, limit - count - 1), 
           resetMs: windowSeconds * 1000 
         };
       } catch (err) {

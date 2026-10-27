@@ -169,7 +169,14 @@ export async function executeCode({ language, code, testCases = [] }) {
     
     let passed = execResult.passed;
     if (passed === undefined) {
-      passed = expectedOutput ? (actualOutput === expectedOutput || actualOutput.includes(expectedOutput)) : true;
+      if (!expectedOutput) {
+        // If problem test case lacks explicit expectedOutput, verify execution succeeded cleanly without stderr
+        passed = execResult.code === 0 && !execResult.stderr;
+      } else {
+        const cleanActual = actualOutput.replace(/\r\n/g, '\n').trim();
+        const cleanExpected = expectedOutput.replace(/\r\n/g, '\n').trim();
+        passed = cleanActual === cleanExpected;
+      }
     }
 
     if (passed) totalPassed++;

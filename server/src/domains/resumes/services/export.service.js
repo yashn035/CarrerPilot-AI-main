@@ -292,13 +292,15 @@ export async function exportToPdf(resumeData) {
   }
 }
 
-export function exportToTxt(resumeData) {
-  const { personalInfo, summary, experience, education, skills, projects, certifications, achievements } = resumeData;
+export function exportToTxt(resumeData = {}) {
+  const safeResume = resumeData || {};
+  const personalInfo = safeResume.personalInfo || {};
+  const { summary, experience, education, skills, projects, certifications, achievements } = safeResume;
   let lines = [];
 
   lines.push('====================================================');
   lines.push((personalInfo.fullName || 'RESUME').toUpperCase());
-  if (resumeData.targetRole) lines.push(`Target Role: ${resumeData.targetRole}`);
+  if (safeResume.targetRole) lines.push(`Target Role: ${safeResume.targetRole}`);
   
   const contacts = [
     personalInfo.email,
@@ -318,10 +320,10 @@ export function exportToTxt(resumeData) {
   if (experience && experience.length) {
     lines.push('--- WORK EXPERIENCE ---');
     experience.forEach(exp => {
-      lines.push(`${exp.position} | ${exp.company} (${exp.location || ''})`);
-      lines.push(`Duration: ${exp.startDate} - ${exp.current ? 'Present' : exp.endDate}`);
+      lines.push(`${exp.position || 'Role'} | ${exp.company || 'Company'} (${exp.location || ''})`);
+      lines.push(`Duration: ${exp.startDate || ''} - ${exp.current ? 'Present' : (exp.endDate || '')}`);
       if (exp.bullets && exp.bullets.length) {
-        exp.bullets.forEach(b => lines.push(`  • ${b}`));
+        exp.bullets.filter(Boolean).forEach(b => lines.push(`  • ${b}`));
       }
       lines.push('');
     });
@@ -330,10 +332,10 @@ export function exportToTxt(resumeData) {
   if (projects && projects.length) {
     lines.push('--- PROJECTS ---');
     projects.forEach(proj => {
-      lines.push(`${proj.title} ${proj.link ? `[${proj.link}]` : ''}`);
+      lines.push(`${proj.title || 'Project'} ${proj.link ? `[${proj.link}]` : ''}`);
       if (proj.subtitle) lines.push(proj.subtitle);
       if (proj.bullets && proj.bullets.length) {
-        proj.bullets.forEach(b => lines.push(`  • ${b}`));
+        proj.bullets.filter(Boolean).forEach(b => lines.push(`  • ${b}`));
       }
       lines.push('');
     });
@@ -342,30 +344,35 @@ export function exportToTxt(resumeData) {
   if (education && education.length) {
     lines.push('--- EDUCATION ---');
     education.forEach(edu => {
-      lines.push(`${edu.degree} ${edu.fieldOfStudy ? `in ${edu.fieldOfStudy}` : ''}`);
-      lines.push(`${edu.institution} | ${edu.startDate} - ${edu.endDate} ${edu.gpa ? `(GPA: ${edu.gpa})` : ''}`);
+      lines.push(`${edu.degree || 'Degree'} ${edu.fieldOfStudy ? `in ${edu.fieldOfStudy}` : ''}`);
+      lines.push(`${edu.institution || 'Institution'} | ${edu.startDate || ''} - ${edu.endDate || ''} ${edu.gpa ? `(GPA: ${edu.gpa})` : ''}`);
       lines.push('');
     });
   }
 
   if (skills) {
     lines.push('--- SKILLS & COMPETENCIES ---');
-    if (skills.technical?.length) lines.push(`Technical: ${skills.technical.join(', ')}`);
-    if (skills.frameworks?.length) lines.push(`Frameworks: ${skills.frameworks.join(', ')}`);
-    if (skills.tools?.length) lines.push(`Tools: ${skills.tools.join(', ')}`);
-    if (skills.soft?.length) lines.push(`Soft Skills: ${skills.soft.join(', ')}`);
+    if (Array.isArray(skills)) {
+      const skillList = skills.map(s => (typeof s === 'string' ? s : s?.name)).filter(Boolean);
+      if (skillList.length) lines.push(`Skills: ${skillList.join(', ')}`);
+    } else {
+      if (skills.technical?.length) lines.push(`Technical: ${skills.technical.join(', ')}`);
+      if (skills.frameworks?.length) lines.push(`Frameworks: ${skills.frameworks.join(', ')}`);
+      if (skills.tools?.length) lines.push(`Tools: ${skills.tools.join(', ')}`);
+      if (skills.soft?.length) lines.push(`Soft Skills: ${skills.soft.join(', ')}`);
+    }
     lines.push('');
   }
 
   if (certifications && certifications.length) {
     lines.push('--- CERTIFICATIONS ---');
-    certifications.forEach(cert => lines.push(`- ${cert.name} (${cert.issuer}, ${cert.date})`));
+    certifications.forEach(cert => lines.push(`- ${cert.name || 'Certification'} (${cert.issuer || ''}, ${cert.date || ''})`));
     lines.push('');
   }
 
   if (achievements && achievements.length) {
     lines.push('--- ACHIEVEMENTS ---');
-    achievements.forEach(ach => lines.push(`- ${ach.title} (${ach.date}): ${ach.description}`));
+    achievements.forEach(ach => lines.push(`- ${ach.title || 'Achievement'} (${ach.date || ''}): ${ach.description || ''}`));
     lines.push('');
   }
 
@@ -373,5 +380,5 @@ export function exportToTxt(resumeData) {
 }
 
 export function exportToJson(resumeData) {
-  return JSON.stringify(resumeData, null, 2);
+  return JSON.stringify(resumeData || {}, null, 2);
 }

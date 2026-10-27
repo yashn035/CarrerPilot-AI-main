@@ -13,9 +13,16 @@ function compileJsTestRunner(userCode, functionName, testCases) {
     
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
+      const rawExpected = tc.expectedOutput !== undefined ? tc.expectedOutput : tc.output;
+      const expected = JSON.stringify(rawExpected !== undefined ? rawExpected : "");
       try {
-        const args = JSON.parse(JSON.stringify(tc.input));
-        const expected = JSON.stringify(tc.output);
+        const rawInput = tc.input;
+        let args;
+        if (Array.isArray(rawInput)) {
+          args = JSON.parse(JSON.stringify(rawInput));
+        } else {
+          args = [rawInput];
+        }
         const actualVal = ${functionName}(...args);
         const actual = JSON.stringify(actualVal);
         const passed = actual === expected;
@@ -29,7 +36,7 @@ function compileJsTestRunner(userCode, functionName, testCases) {
       } catch (err) {
         results.push({
           input: tc.input,
-          expected: JSON.stringify(tc.output),
+          expected,
           actual: "Error: " + err.message,
           passed: false
         });
@@ -52,8 +59,8 @@ passed_count = 0
 sol = ${className}()
 
 for tc in test_cases:
-    args = tc['input']
-    expected_val = tc['output']
+    args = tc.get('input')
+    expected_val = tc.get('expectedOutput') if 'expectedOutput' in tc else tc.get('output', '')
     expected = json.dumps(expected_val)
     try:
         if isinstance(args, list):
@@ -90,8 +97,9 @@ print(json.dumps({
 function compileJavaTestRunner(userCode, testCases) {
   let tcCode = '';
   testCases.forEach((tc, idx) => {
-    const argsJson = JSON.stringify(tc.input);
-    const expectedJson = JSON.stringify(tc.output);
+    const argsJson = JSON.stringify(tc.input !== undefined ? tc.input : '');
+    const rawExpected = tc.expectedOutput !== undefined ? tc.expectedOutput : (tc.output !== undefined ? tc.output : '');
+    const expectedJson = JSON.stringify(rawExpected);
     tcCode += `
       try {
         Object[] args = parseArgs(paramTypes, "${argsJson.replace(/"/g, '\\"')}");
